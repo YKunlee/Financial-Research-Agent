@@ -1,0 +1,38 @@
+RISK_RULES_V1 = [
+    {
+        "code": "DRAWDOWN_HIGH",
+        "severity": "high",
+        "title": "Large peak-to-trough drawdown",
+        "field": "technicals.max_drawdown",
+        "op": "<=",
+        "threshold": -0.2,
+        "details": "Max drawdown at or below -20% over the available window.",
+    },
+    {
+        "code": "VOLATILITY_HIGH",
+        "severity": "medium",
+        "title": "Elevated short-term volatility",
+        "field": "technicals.volatility_20",
+        "op": ">=",
+        "threshold": 0.04,
+        "details": "20-day return volatility at or above 4% (daily).",
+    },
+    {
+        "code": "SHARPE_NEGATIVE",
+        "severity": "medium",
+        "title": "Negative short-term Sharpe",
+        "field": "risk.sharpe_20",
+        "op": "<",
+        "threshold": 0.0,
+        "details": "20-day Sharpe ratio below 0 indicates unfavorable risk-adjusted returns.",
+    },
+    {
+        "code": "VAR_TAIL_RISK",
+        "severity": "high",
+        "title": "Large 1-day VaR (95%)",
+        "field": "risk.var_95_20",
+        "op": "<=",
+        "threshold": -0.05,
+        "details": "Historical 1-day VaR at 95% at or below -5% based on the last 20 returns.",
+    },
+]

@@ -1,0 +1,6 @@
+symbol,market,company_name,aliases
+AAPL,NASDAQ,Apple Inc.,"apple,apple computer"
+MSFT,NASDAQ,Microsoft Corporation,"microsoft,msft"
+GOOGL,NASDAQ,Alphabet Inc.,"google,alphabet"
+AMZN,NASDAQ,Amazon.com Inc.,"amazon,amazon.com"
+TSLA,NASDAQ,Tesla Inc.,"tesla"

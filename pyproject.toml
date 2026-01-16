@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finresearch-agent"
+version = "0.1.0"
+description = "Code-first, reproducible stock research agent with Redis cache and explain-only LLM integration."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "redis>=5.0",
+  "requests>=2.31",
+  "pandas>=2.2",
+  "numpy>=1.26",
+  "python-dateutil>=2.9",
+  "langchain>=0.2",
+  "langchain-core>=0.2",
+  "langchain-openai>=0.1",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "fakeredis>=2.21",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+finresearch = "finresearch_agent.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,2 +1,51 @@
 # Financial-Research-Agent
-Financial Research Agent automates equity research by collecting market data, financial statements, filings, and news for a given company or industry. It summarizes revenue, profitability, guidance, risks, and management tone, and flags negative signals to support structured investment decisions.
+Production-oriented, code-first Stock Research Agent with:
+
+- Deterministic, versioned computations (no LLM math)
+- Redis-backed caching for reproducible inputs/outputs
+- Immutable, hash-addressed analysis snapshots (`analysis_id`)
+- Explain-only LLM integration (LLM reads JSON snapshot only)
+
+## Principles
+- LLM does **not** compute numbers: all indicators/metrics are computed in code.
+- Every analysis is reproducible: the snapshot is persisted as JSON and keyed by a hash of inputs + data + versions.
+- Caching comes before external calls (Redis).
+
+## Quickstart
+1) Start Redis
+
+Option A (Docker on the same machine):
+
+`docker run -p 6379:6379 redis:7`
+
+Option B (Redis inside WSL):
+
+- If you run `finresearch` inside WSL and Redis is `127.0.0.1:6379`, set `REDIS_URL=redis://127.0.0.1:6379/0`.
+- If you run `finresearch` on Windows but Redis is inside WSL2 and bound to `127.0.0.1`, Windows cannot reach it directly; either:
+  - run `finresearch` inside WSL, or
+  - reconfigure Redis to listen on `0.0.0.0` / set up port forwarding, then set `REDIS_URL` accordingly.
+
+2) Install (example):
+
+`pip install -e .`
+
+3) Configure env:
+
+`cp .env.example .env`
+
+4) Run:
+
+`finresearch --query "Apple" --as-of 2025-12-31`
+
+Snapshots are written to `./snapshots/{analysis_id}.json` (default).
+
+## What’s implemented
+- `T1` Identification: `data/companies.csv` + `data/aliases.json` (no LLM guessing)
+- `T2` Market data + cache: Stooq provider + `market_data:{symbol}:{date}` Redis keys (TTL 24h)
+- `T3` Financials + cache: quarter-keyed cache `financials:{symbol}:{quarter}` (provider pluggable)
+- `T4` Technical indicators (versioned): MA, volatility, max drawdown (`metrics_v1.0.0`)
+- `T5` Risk metrics (versioned): Sharpe, historical VaR (`risk_v1.0.0`)
+- `T7` Declarative risk rules: versioned flags (`risk_rules_v1`)
+- `T8` Snapshot: hash-based `analysis_id`, persisted JSON
+- `T9` Explain-only: LangChain prompt + numeric-token guardrail + deterministic fallback
+- `T10` Formatter: facts vs. explanation separation (`--json` for machine output)
