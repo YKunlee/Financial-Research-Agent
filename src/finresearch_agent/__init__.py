@@ -5,6 +5,7 @@ __all__ = [
     "constants",
     "datasources",
     "identify",
+    "ipo",
     "llm",
     "metrics",
     "models",

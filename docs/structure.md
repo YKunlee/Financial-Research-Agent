@@ -10,7 +10,7 @@
 ```
 Financial-Research-Agent/
   data/                     # 公司与别名基础数据
-  docs/                     # 文档
+  docs/                     # 文档（含 HK IPO 报告说明）
   snapshots/                # 分析快照输出（JSON）
   src/finresearch_agent/    # 核心代码
   tests/                    # 单元测试
@@ -79,6 +79,8 @@ Financial-Research-Agent/
   统一编排：识别 -> 拉行情 -> 计算 -> 规则 -> 快照 -> 解释。
 - `src/finresearch_agent/cli.py`  
   CLI 入口：`finresearch --query "Apple" --as-of YYYY-MM-DD`
+- `src/finresearch_agent/ipo/agent.py` / `src/finresearch_agent/ipo/cli.py`  
+  HK IPO 报告：消费已提供的 IPO 日历/公司信息/摘录，输出结构化研究 JSON（默认不抓取网页）。详见 `docs/ipo.md`。
 - `src/finresearch_agent/formatter.py`  
   输出格式（facts + explanation）。
 

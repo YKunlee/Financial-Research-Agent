@@ -32,6 +32,7 @@ dev = [
 
 [project.scripts]
 finresearch = "finresearch_agent.cli:main"
+finresearch-ipo = "finresearch_agent.ipo.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
