@@ -19,6 +19,7 @@ dependencies = [
   "langchain-core>=0.2",
   "langchain-openai>=0.1",
   "python-dotenv>=1.0",
+  "streamlit>=1.36",
 ]
 
 [project.optional-dependencies]

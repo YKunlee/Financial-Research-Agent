@@ -39,6 +39,21 @@ Option B (Redis inside WSL):
 
 Snapshots are written to `./snapshots/{analysis_id}.json` (default).
 
+## Streamlit UI
+Visualize snapshots with a lightweight dashboard:
+
+1) Install Streamlit:
+
+`pip install -e .`
+
+2) Run the app:
+
+`streamlit run streamlit_app.py`
+
+3) Select a snapshot from `./snapshots/` or upload a JSON file.
+
+The sidebar includes a `Language / 语言` switch for Chinese/English UI text.
+
 ## What’s implemented
 - `T1` Identification: `data/companies.csv` + `data/aliases.json` (no LLM guessing)
 - `T2` Market data + cache: Stooq provider + `market_data:{symbol}:{date}` Redis keys (TTL 24h)

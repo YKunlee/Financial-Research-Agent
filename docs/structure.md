@@ -15,6 +15,7 @@ Financial-Research-Agent/
   src/finresearch_agent/    # 核心代码
   tests/                    # 单元测试
   README.md                 # 使用说明
+  streamlit_app.py          # Streamlit 可视化界面
   .env.example              # 环境变量模板
   pyproject.toml            # 包配置
   requirements.txt          # 依赖列表
