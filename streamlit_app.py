@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 import streamlit as st
+from datetime import date
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
@@ -14,6 +15,11 @@ if SRC.exists() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from finresearch_agent.models import AnalysisSnapshot
+from finresearch_agent.config import get_settings
+from finresearch_agent.ipo.agent import build_hk_ipo_report, iso_week_string
+from finresearch_agent.ipo.models import IpoReport
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
 
 SNAPSHOTS_DIR = ROOT / "snapshots"
 
@@ -21,64 +27,87 @@ SNAPSHOTS_DIR = ROOT / "snapshots"
 I18N: dict[str, dict[str, str]] = {
     "zh": {
         "page_title": "金融研究看板",
-        "sidebar_title": "快照",
-        "language": "语言",
-        "language_zh": "中文",
+        "sidebar_title": "導航",
+        "nav_dashboard": "研究看板",
+        "nav_ipo": "IPO 報告",
+        "language": "語言",
+        "language_zh": "繁體中文",
         "language_en": "English",
-        "source": "数据来源",
-        "source_local": "本地 snapshots",
-        "source_upload": "上传 JSON",
-        "missing_snapshots_dir": "缺少 snapshots 目录：{path}",
+        "source": "數據來源",
+        "source_local": "本地快照",
+        "source_upload": "上傳 JSON",
+        "missing_snapshots_dir": "缺少 snapshots 目錄：{path}",
         "no_snapshots": "未找到快照文件。",
-        "snapshot_file": "选择快照文件",
-        "upload_json": "上传 JSON",
+        "snapshot_file": "選擇快照文件",
+        "upload_json": "上傳 JSON",
         "hero_title": "金融研究看板",
-        "hero_sub": "加载快照后可视化行情、指标与风险标记。",
-        "hero_hint": "从侧边栏选择快照或上传 JSON 文件开始。",
-        "renders_only": "本界面只渲染不可变快照数据，不会计算新增指标。",
-        "parse_failed": "无法解析快照：{err}",
-        "market": "市场",
+        "hero_sub": "加載快照後可視化行情、指標與風險標記。",
+        "hero_hint": "從側邊欄選擇快照或上傳 JSON 文件開始。",
+        "renders_only": "本介面只渲染不可變快照數據，不會計算新增指標。",
+        "parse_failed": "無法解析快照：{err}",
+        "market": "市場",
         "as_of": "截止日期",
         "analysis_id": "分析 ID",
-        "risk_level": "风险等级",
-        "close": "收盘价",
-        "ma20": "20日均线",
-        "ma50": "50日均线",
-        "vol20": "20日波动率",
+        "risk_level": "風險等級",
+        "close": "收盤價",
+        "ma20": "20日均線",
+        "ma50": "50日均線",
+        "vol20": "20日波動率",
         "mdd": "最大回撤",
         "sharpe20": "20日夏普",
         "var95_20": "VaR 95 (20日)",
-        "metrics_version": "指标版本",
-        "risk_version": "风险版本",
-        "rules_version": "规则版本",
+        "metrics_version": "指標版本",
+        "risk_version": "風險版本",
+        "rules_version": "規則版本",
         "tab_market": "行情",
-        "tab_risk": "风险与规则",
-        "tab_financials": "财务",
+        "tab_risk": "風險與規則",
+        "tab_financials": "財務",
         "tab_snapshot": "快照",
-        "no_market_data": "该快照不包含行情数据。",
-        "bars_to_display": "展示K线数量",
-        "close_price": "收盘价走势",
+        "no_market_data": "該快照不包含行情數據。",
+        "bars_to_display": "展示K線數量",
+        "close_price": "收盤價走勢",
         "volume": "成交量",
         "market_table": "行情表格",
-        "source_caption": "来源：{source}",
-        "risk_flags": "风险标记",
-        "no_risk_flags": "该快照未触发任何风险标记。",
-        "data_provenance": "数据溯源",
-        "data_timestamps": "数据时间戳",
+        "source_caption": "來源：{source}",
+        "risk_flags": "風險標記",
+        "no_risk_flags": "該快照未觸發任何風險標記。",
+        "data_provenance": "數據溯源",
+        "data_timestamps": "數據時間戳",
         "algo_versions": "算法版本",
-        "no_financials": "该快照不包含财务数据。",
+        "no_financials": "該快照不包含財務數據。",
         "snapshot_json": "快照 JSON",
-        "explanation": "解释",
-        "no_explanation": "该 JSON 不包含解释文本。",
+        "explanation": "解釋",
+        "no_explanation": "該 JSON 不包含解釋文本。",
         "risk_low": "低",
         "risk_medium": "中",
         "risk_high": "高",
+        "ipo_header": "港股 IPO 研究報告",
+        "ipo_input_section": "IPO 數據輸入",
+        "ipo_generate_btn": "生成報告",
+        "ipo_use_llm": "使用 LLM 提取缺失字段與風險",
+        "ipo_as_of": "報告日期",
+        "ipo_week": "週份",
+        "ipo_industry": "行業",
+        "ipo_status": "狀態",
+        "ipo_expected_listing": "預計上市日期",
+        "ipo_business_summary": "業務摘要",
+        "ipo_key_risks": "關鍵風險",
+        "ipo_disclaimer": "免責聲明",
+        "ipo_no_data": "請上傳或選擇 IPO 原始數據 JSON 以生成報告。",
+        "ipo_parse_failed": "解析 IPO 數據失敗：{err}",
+        "ipo_chat_placeholder": "在此輸入 IPO 相關信息或詢問...",
+        "ipo_source_label": "原始資料來源 (粘貼招股書摘錄或新聞)",
+        "ipo_parsing": "正在分析您的輸入內容...",
+        "ipo_no_info": "未發現足夠的 IPO 信息。請輸入更多詳情，例如：'XX公司擬於XX日期上市，業務是...'。",
+        "ipo_found_n": "成功解析出 {n} 條 IPO 記錄。",
     },
     "en": {
         "page_title": "Financial Research Dashboard",
-        "sidebar_title": "Snapshot",
+        "sidebar_title": "Navigation",
+        "nav_dashboard": "Dashboard",
+        "nav_ipo": "IPO Report",
         "language": "Language",
-        "language_zh": "中文",
+        "language_zh": "繁體中文",
         "language_en": "English",
         "source": "Source",
         "source_local": "Local snapshots",
@@ -128,6 +157,25 @@ I18N: dict[str, dict[str, str]] = {
         "risk_low": "low",
         "risk_medium": "medium",
         "risk_high": "high",
+        "ipo_header": "HK IPO Research Report",
+        "ipo_input_section": "IPO Data Input",
+        "ipo_generate_btn": "Generate Report",
+        "ipo_use_llm": "Use LLM to extract missing fields & risks",
+        "ipo_as_of": "As of Date",
+        "ipo_week": "Week",
+        "ipo_industry": "Industry",
+        "ipo_status": "Status",
+        "ipo_expected_listing": "Expected Listing",
+        "ipo_business_summary": "Business Summary",
+        "ipo_key_risks": "Key Risks",
+        "ipo_disclaimer": "Disclaimer",
+        "ipo_no_data": "Please upload or select IPO raw data JSON to generate report.",
+        "ipo_parse_failed": "Failed to parse IPO data: {err}",
+        "ipo_chat_placeholder": "Type IPO info or questions here...",
+        "ipo_source_label": "Raw Source Text (Paste prospectus or news)",
+        "ipo_parsing": "Analyzing your input...",
+        "ipo_no_info": "Not enough IPO info found. Please provide more details.",
+        "ipo_found_n": "Parsed {n} IPO records.",
     },
 }
 
@@ -260,182 +308,318 @@ def format_value(value: float | int | None, decimals: int = 4) -> str:
     return f"{value:.{decimals}f}"
 
 
+def render_ipo_report(report: IpoReport, lang_code: str) -> None:
+    st.markdown(f"## {t('ipo_header', lang=lang_code)}")
+    st.caption(f"{t('market', lang=lang_code)}: {report.market} • {t('ipo_week', lang=lang_code)}: {report.week}")
+
+    for entry in report.ipos:
+        with st.expander(f"{entry.company_name} ({entry.status})", expanded=True):
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.write(f"**{t('ipo_industry', lang=lang_code)}**: {entry.industry}")
+                st.write(f"**{t('ipo_status', lang=lang_code)}**: {entry.status}")
+            with col2:
+                listing_date = entry.expected_listing_date.isoformat() if entry.expected_listing_date else "—"
+                st.write(f"**{t('ipo_expected_listing', lang=lang_code)}**: {listing_date}")
+                st.write(f"**{t('source', lang=lang_code)}**: {entry.data_source}")
+
+            st.markdown(f"**{t('ipo_business_summary', lang=lang_code)}**")
+            st.write(entry.business_summary)
+
+            if entry.key_risks:
+                st.markdown(f"**{t('ipo_key_risks', lang=lang_code)}**")
+                for risk in entry.key_risks:
+                    st.markdown(f"- **{risk.risk_type}** ({risk.source})")
+
+    st.divider()
+    st.caption(f"**{t('ipo_disclaimer', lang=lang_code)}**: {report.disclaimer}")
+
+
+def extract_ipos_from_text(text: str, settings: Settings) -> list[dict[str, Any]]:
+    if not settings.openai_api_key or not text.strip():
+        return []
+
+    model = ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model, temperature=0)
+    sys_msg = SystemMessage(
+        content=(
+            "You are a financial data extractor. Extract HK IPO records from the provided text.\n"
+            "Return a JSON list of objects, each containing:\n"
+            "- company_name: string\n"
+            "- status: 'subscription_open', 'subscription_upcoming', 'hearing_passed', or 'expected_listing'\n"
+            "- expected_listing_date: 'YYYY-MM-DD' or null\n"
+            "- industry: string or null\n"
+            "- business_summary: string or null\n"
+            "- prospectus_excerpt: string (verbatim quote from text about the company)\n"
+            "- announcement_excerpt: string (verbatim quote from text about the IPO status/date)\n"
+            "Rules:\n"
+            "- If multiple companies are mentioned, return multiple objects.\n"
+            "- Use ONLY facts from the text.\n"
+            "- Output strictly valid JSON list only.\n"
+        )
+    )
+    user_msg = HumanMessage(content=text)
+
+    try:
+        resp = model.invoke([sys_msg, user_msg])
+        content = str(resp.content).strip()
+        if content.startswith("```json"):
+            content = content[7:-3].strip()
+        elif content.startswith("```"):
+            content = content[3:-3].strip()
+        
+        data = json.loads(content)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
 def main() -> None:
     st.set_page_config(page_title="Financial Research Dashboard / 金融研究看板", layout="wide")
     inject_style()
 
     lang = st.sidebar.selectbox(
-        "Language / 语言",
-        options=["中文", "English"],
+        "Language / 語言",
+        options=["繁體中文", "English"],
         index=0,
         key="lang_select",
     )
-    lang_code = "zh" if lang == "中文" else "en"
+    lang_code = "zh" if lang == "繁體中文" else "en"
 
     st.sidebar.title(t("sidebar_title", lang=lang_code))
-    source_key = st.sidebar.radio(
-        t("source", lang=lang_code),
-        options=["local", "upload"],
-        format_func=lambda v: t("source_local", lang=lang_code)
-        if v == "local"
-        else t("source_upload", lang=lang_code),
-        horizontal=False,
-        key="source_key",
+
+    nav_mode = st.sidebar.radio(
+        "Menu",
+        options=["dashboard", "ipo"],
+        format_func=lambda v: t("nav_dashboard", lang=lang_code) if v == "dashboard" else t("nav_ipo", lang=lang_code),
+        label_visibility="collapsed",
     )
 
-    payload: dict[str, Any] | None = None
-    if source_key == "local":
-        if not SNAPSHOTS_DIR.exists():
-            st.sidebar.warning(
-                t("missing_snapshots_dir", lang=lang_code, path=str(SNAPSHOTS_DIR))
-            )
-        files = sorted(SNAPSHOTS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not files:
-            st.sidebar.info(t("no_snapshots", lang=lang_code))
-        else:
-            selected = st.sidebar.selectbox(
-                t("snapshot_file", lang=lang_code), files, format_func=lambda p: p.name
-            )
-            payload = load_payload(selected)
-    else:
-        uploaded = st.sidebar.file_uploader(t("upload_json", lang=lang_code), type=["json"])
-        if uploaded is not None:
-            payload = json.loads(uploaded.read().decode("utf-8"))
+    if nav_mode == "dashboard":
+        source_key = st.sidebar.radio(
+            t("source", lang=lang_code),
+            options=["local", "upload"],
+            format_func=lambda v: t("source_local", lang=lang_code)
+            if v == "local"
+            else t("source_upload", lang=lang_code),
+            horizontal=False,
+            key="source_key",
+        )
 
-    if payload is None:
+        payload: dict[str, Any] | None = None
+        if source_key == "local":
+            if not SNAPSHOTS_DIR.exists():
+                st.sidebar.warning(
+                    t("missing_snapshots_dir", lang=lang_code, path=str(SNAPSHOTS_DIR))
+                )
+            files = sorted(SNAPSHOTS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if not files:
+                st.sidebar.info(t("no_snapshots", lang=lang_code))
+            else:
+                selected = st.sidebar.selectbox(
+                    t("snapshot_file", lang=lang_code), files, format_func=lambda p: p.name
+                )
+                payload = load_payload(selected)
+        else:
+            uploaded = st.sidebar.file_uploader(t("upload_json", lang=lang_code), type=["json"])
+            if uploaded is not None:
+                payload = json.loads(uploaded.read().decode("utf-8"))
+
+        if payload is None:
+            st.markdown(
+                f"""
+    <div class="hero">
+      <div class="hero-title">{t("hero_title", lang=lang_code)}</div>
+      <div class="hero-sub">{t("hero_sub", lang=lang_code)}</div>
+    </div>
+    """,
+                unsafe_allow_html=True,
+            )
+            st.info(t("hero_hint", lang=lang_code))
+            st.stop()
+
+        try:
+            snapshot_dict, explanation = normalize_payload(payload)
+            snapshot = AnalysisSnapshot.model_validate(snapshot_dict)
+        except Exception as exc:  # noqa: BLE001 - present user-facing error
+            st.error(t("parse_failed", lang=lang_code, err=str(exc)))
+            st.stop()
+
+        risk_level = risk_level_from_flags(snapshot.rules.flags)
+        risk_text = (
+            t("risk_high", lang=lang_code)
+            if risk_level == "high"
+            else t("risk_medium", lang=lang_code)
+            if risk_level == "medium"
+            else t("risk_low", lang=lang_code)
+        )
+        badge_html_localized = f'<span class="badge {risk_level}">{risk_text}</span>'
+
         st.markdown(
             f"""
-<div class="hero">
-  <div class="hero-title">{t("hero_title", lang=lang_code)}</div>
-  <div class="hero-sub">{t("hero_sub", lang=lang_code)}</div>
-</div>
-""",
+    <div class="hero">
+      <div class="hero-title">{snapshot.company_name} <span class="mono">({snapshot.symbol})</span></div>
+      <div class="hero-sub">{t("market", lang=lang_code)}: {snapshot.market} • {t("as_of", lang=lang_code)}: {snapshot.as_of.isoformat()} • {t("analysis_id", lang=lang_code)}: <span class="mono">{snapshot.analysis_id}</span></div>
+      <div style="margin-top:10px;">{t("risk_level", lang=lang_code)}: {badge_html_localized}</div>
+    </div>
+    """,
             unsafe_allow_html=True,
         )
-        st.info(t("hero_hint", lang=lang_code))
-        st.stop()
 
-    try:
-        snapshot_dict, explanation = normalize_payload(payload)
-        snapshot = AnalysisSnapshot.model_validate(snapshot_dict)
-    except Exception as exc:  # noqa: BLE001 - present user-facing error
-        st.error(t("parse_failed", lang=lang_code, err=str(exc)))
-        st.stop()
+        st.caption(t("renders_only", lang=lang_code))
 
-    risk_level = risk_level_from_flags(snapshot.rules.flags)
-    risk_text = (
-        t("risk_high", lang=lang_code)
-        if risk_level == "high"
-        else t("risk_medium", lang=lang_code)
-        if risk_level == "medium"
-        else t("risk_low", lang=lang_code)
-    )
-    badge_html_localized = f'<span class="badge {risk_level}">{risk_text}</span>'
+        market_df = to_market_df(snapshot)
+        latest_close = market_df["close"].iloc[-1] if not market_df.empty else None
 
-    st.markdown(
-        f"""
-<div class="hero">
-  <div class="hero-title">{snapshot.company_name} <span class="mono">({snapshot.symbol})</span></div>
-  <div class="hero-sub">{t("market", lang=lang_code)}: {snapshot.market} • {t("as_of", lang=lang_code)}: {snapshot.as_of.isoformat()} • {t("analysis_id", lang=lang_code)}: <span class="mono">{snapshot.analysis_id}</span></div>
-  <div style="margin-top:10px;">{t("risk_level", lang=lang_code)}: {badge_html_localized}</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric(t("close", lang=lang_code), format_value(latest_close, 2))
+        col2.metric(t("ma20", lang=lang_code), format_value(snapshot.technicals.ma_20, 2))
+        col3.metric(t("ma50", lang=lang_code), format_value(snapshot.technicals.ma_50, 2))
+        col4.metric(t("vol20", lang=lang_code), format_value(snapshot.technicals.volatility_20, 6))
+        col5.metric(t("mdd", lang=lang_code), format_value(snapshot.technicals.max_drawdown, 6))
 
-    st.caption(t("renders_only", lang=lang_code))
+        col6, col7, col8, col9, col10 = st.columns(5)
+        col6.metric(t("sharpe20", lang=lang_code), format_value(snapshot.risk.sharpe_20, 4))
+        col7.metric(t("var95_20", lang=lang_code), format_value(snapshot.risk.var_95_20, 6))
+        col8.metric(t("metrics_version", lang=lang_code), snapshot.algo_versions.get("metrics", "—"))
+        col9.metric(t("risk_version", lang=lang_code), snapshot.algo_versions.get("risk", "—"))
+        col10.metric(t("rules_version", lang=lang_code), snapshot.algo_versions.get("rules", "—"))
 
-    market_df = to_market_df(snapshot)
-    latest_close = market_df["close"].iloc[-1] if not market_df.empty else None
+        tabs = st.tabs(
+            [
+                t("tab_market", lang=lang_code),
+                t("tab_risk", lang=lang_code),
+                t("tab_financials", lang=lang_code),
+                t("tab_snapshot", lang=lang_code),
+            ]
+        )
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric(t("close", lang=lang_code), format_value(latest_close, 2))
-    col2.metric(t("ma20", lang=lang_code), format_value(snapshot.technicals.ma_20, 2))
-    col3.metric(t("ma50", lang=lang_code), format_value(snapshot.technicals.ma_50, 2))
-    col4.metric(t("vol20", lang=lang_code), format_value(snapshot.technicals.volatility_20, 6))
-    col5.metric(t("mdd", lang=lang_code), format_value(snapshot.technicals.max_drawdown, 6))
+        with tabs[0]:
+            if market_df.empty:
+                st.warning(t("no_market_data", lang=lang_code))
+            else:
+                min_bars = min(20, len(market_df))
+                bar_count = st.slider(
+                    t("bars_to_display", lang=lang_code),
+                    min_value=min_bars,
+                    max_value=len(market_df),
+                    value=min(120, len(market_df)),
+                )
+                view_df = market_df.tail(bar_count)
 
-    col6, col7, col8, col9, col10 = st.columns(5)
-    col6.metric(t("sharpe20", lang=lang_code), format_value(snapshot.risk.sharpe_20, 4))
-    col7.metric(t("var95_20", lang=lang_code), format_value(snapshot.risk.var_95_20, 6))
-    col8.metric(t("metrics_version", lang=lang_code), snapshot.algo_versions.get("metrics", "—"))
-    col9.metric(t("risk_version", lang=lang_code), snapshot.algo_versions.get("risk", "—"))
-    col10.metric(t("rules_version", lang=lang_code), snapshot.algo_versions.get("rules", "—"))
+                st.subheader(t("close_price", lang=lang_code))
+                st.line_chart(view_df["close"], height=320)
+                st.caption(t("source_caption", lang=lang_code, source=snapshot.market_data.source))
 
-    tabs = st.tabs(
-        [
-            t("tab_market", lang=lang_code),
-            t("tab_risk", lang=lang_code),
-            t("tab_financials", lang=lang_code),
-            t("tab_snapshot", lang=lang_code),
-        ]
-    )
+                st.subheader(t("volume", lang=lang_code))
+                st.bar_chart(view_df["volume"], height=220)
 
-    with tabs[0]:
-        if market_df.empty:
-            st.warning(t("no_market_data", lang=lang_code))
-        else:
-            min_bars = min(20, len(market_df))
-            bar_count = st.slider(
-                t("bars_to_display", lang=lang_code),
-                min_value=min_bars,
-                max_value=len(market_df),
-                value=min(120, len(market_df)),
-            )
-            view_df = market_df.tail(bar_count)
+                with st.expander(t("market_table", lang=lang_code)):
+                    st.dataframe(view_df, use_container_width=True)
 
-            st.subheader(t("close_price", lang=lang_code))
-            st.line_chart(view_df["close"], height=320)
-            st.caption(t("source_caption", lang=lang_code, source=snapshot.market_data.source))
+        with tabs[1]:
+            if snapshot.rules.flags:
+                st.subheader(t("risk_flags", lang=lang_code))
+                for flag in snapshot.rules.flags:
+                    if flag.severity == "high":
+                        st.error(f"{flag.title} ({flag.code})")
+                    elif flag.severity == "medium":
+                        st.warning(f"{flag.title} ({flag.code})")
+                    else:
+                        st.info(f"{flag.title} ({flag.code})")
+                    st.caption(flag.details)
+                    if flag.evidence:
+                        st.json(flag.evidence)
+            else:
+                st.success(t("no_risk_flags", lang=lang_code))
 
-            st.subheader(t("volume", lang=lang_code))
-            st.bar_chart(view_df["volume"], height=220)
+            with st.expander(t("data_provenance", lang=lang_code)):
+                st.write(t("data_timestamps", lang=lang_code))
+                st.json({k: v.isoformat() for k, v in snapshot.data_timestamps.items()})
+                st.write(t("algo_versions", lang=lang_code))
+                st.json(snapshot.algo_versions)
 
-            with st.expander(t("market_table", lang=lang_code)):
-                st.dataframe(view_df, use_container_width=True)
+        with tabs[2]:
+            if not snapshot.financials:
+                st.info(t("no_financials", lang=lang_code))
+            else:
+                rows = []
+                for quarter in snapshot.financials:
+                    base = quarter.model_dump(mode="json")
+                    values = base.pop("values", {})
+                    rows.append({**base, **values})
+                fin_df = pd.DataFrame(rows)
+                st.dataframe(fin_df, use_container_width=True)
 
-    with tabs[1]:
-        if snapshot.rules.flags:
-            st.subheader(t("risk_flags", lang=lang_code))
-            for flag in snapshot.rules.flags:
-                if flag.severity == "high":
-                    st.error(f"{flag.title} ({flag.code})")
-                elif flag.severity == "medium":
-                    st.warning(f"{flag.title} ({flag.code})")
-                else:
-                    st.info(f"{flag.title} ({flag.code})")
-                st.caption(flag.details)
-                if flag.evidence:
-                    st.json(flag.evidence)
-        else:
-            st.success(t("no_risk_flags", lang=lang_code))
+        with tabs[3]:
+            st.subheader(t("snapshot_json", lang=lang_code))
+            st.json(snapshot.model_dump(mode="json"))
+            if explanation:
+                st.subheader(t("explanation", lang=lang_code))
+                st.write(explanation)
+            else:
+                st.info(t("no_explanation", lang=lang_code))
+    else:
+        # IPO Mode
+        st.markdown(f"## {t('nav_ipo', lang=lang_code)}")
+        
+        if "ipo_messages" not in st.session_state:
+            st.session_state["ipo_messages"] = []
 
-        with st.expander(t("data_provenance", lang=lang_code)):
-            st.write(t("data_timestamps", lang=lang_code))
-            st.json({k: v.isoformat() for k, v in snapshot.data_timestamps.items()})
-            st.write(t("algo_versions", lang=lang_code))
-            st.json(snapshot.algo_versions)
+        for msg in st.session_state["ipo_messages"]:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+                if "report" in msg:
+                    render_ipo_report(msg["report"], lang_code)
 
-    with tabs[2]:
-        if not snapshot.financials:
-            st.info(t("no_financials", lang=lang_code))
-        else:
-            rows = []
-            for quarter in snapshot.financials:
-                base = quarter.model_dump(mode="json")
-                values = base.pop("values", {})
-                rows.append({**base, **values})
-            fin_df = pd.DataFrame(rows)
-            st.dataframe(fin_df, use_container_width=True)
+        with st.sidebar:
+            st.divider()
+            st.subheader(t("ipo_input_section", lang=lang_code))
+            as_of = st.date_input(t("ipo_as_of", lang=lang_code), value=date.today())
+            raw_source = st.text_area(t("ipo_source_label", lang=lang_code), height=200, help="Paste prospectus or news here")
+            use_llm = st.checkbox(t("ipo_use_llm", lang=lang_code), value=True)
+            generate_btn = st.button(t("ipo_generate_btn", lang=lang_code), type="primary")
 
-    with tabs[3]:
-        st.subheader(t("snapshot_json", lang=lang_code))
-        st.json(snapshot.model_dump(mode="json"))
-        if explanation:
-            st.subheader(t("explanation", lang=lang_code))
-            st.write(explanation)
-        else:
-            st.info(t("no_explanation", lang=lang_code))
+        query = st.chat_input(t("ipo_chat_placeholder", lang=lang_code))
+        
+        if query or generate_btn:
+            input_text = query if query else raw_source
+            if not input_text.strip():
+                st.warning(t("ipo_no_info", lang=lang_code))
+            else:
+                if query:
+                    st.session_state["ipo_messages"].append({"role": "user", "content": query})
+                    with st.chat_message("user"):
+                        st.write(query)
+
+                with st.chat_message("assistant"):
+                    with st.spinner(t("ipo_parsing", lang=lang_code)):
+                        settings = get_settings()
+                        # If the user just typed a short query and we have raw_source, combine them
+                        combined_text = f"Query: {query}\n\nContext:\n{raw_source}" if query and raw_source.strip() else input_text
+                        
+                        records = extract_ipos_from_text(combined_text, settings)
+                        
+                        if not records:
+                            msg_content = t("ipo_no_info", lang=lang_code)
+                            st.write(msg_content)
+                            st.session_state["ipo_messages"].append({"role": "assistant", "content": msg_content})
+                        else:
+                            week = iso_week_string(as_of)
+                            report = build_hk_ipo_report(
+                                records,
+                                as_of_date=as_of,
+                                week=week,
+                                settings=settings,
+                                use_llm_extraction=use_llm
+                            )
+                            msg_content = t("ipo_found_n", lang=lang_code, n=len(report.ipos))
+                            st.write(msg_content)
+                            render_ipo_report(report, lang_code)
+                            st.session_state["ipo_messages"].append({
+                                "role": "assistant", 
+                                "content": msg_content,
+                                "report": report
+                            })
 
 
 if __name__ == "__main__":
