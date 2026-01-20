@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from finresearch_agent.models import RiskMetrics, TechnicalIndicators
-from finresearch_agent.rules.engine import apply_risk_rules
+from finresearch_agent.rules import apply_risk_rules
 
 
 def test_rules_are_versioned_and_structured():

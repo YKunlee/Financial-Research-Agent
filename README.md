@@ -48,13 +48,7 @@ Input JSON can be either:
 - a list of IPO records, or
 - an object with `ipos: [...]` (optionally with `data_source`).
 
-Each record should include at least `company_name` and `status` (one of `subscription_open`, `subscription_upcoming`, `hearing_passed`, `expected_listing`). Optional fields include `expected_listing_date` (YYYY-MM-DD), `industry`, `business_description`, and `risks` (`[{risk_type, source}]`).
-
-Optional LLM extraction (best-effort, extractive-only) is available when `OPENAI_API_KEY` is set:
-
-`finresearch-ipo --input path/to/hk_ipos.json --use-llm`
-
-See `docs/ipo.md` for the full input/output contract and constraints.
+See `docs/ipo.md` for details.
 
 ## Streamlit UI
 Visualize snapshots with a lightweight dashboard:

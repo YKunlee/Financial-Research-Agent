@@ -6,8 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from finresearch_agent.agent.stock_agent import StockResearchAgent
-from finresearch_agent.cache.redis_cache import RedisJSONCache
+from finresearch_agent.agent import StockResearchAgent
+from finresearch_agent.cache import RedisJSONCache
 from finresearch_agent.config import get_settings
 from finresearch_agent.formatter import format_cli, format_result
 from finresearch_agent.utils import json_dumps

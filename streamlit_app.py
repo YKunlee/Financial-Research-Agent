@@ -15,9 +15,9 @@ if SRC.exists() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from finresearch_agent.models import AnalysisSnapshot
-from finresearch_agent.config import get_settings
-from finresearch_agent.ipo.agent import build_hk_ipo_report, iso_week_string
-from finresearch_agent.ipo.models import IpoReport
+from finresearch_agent.config import get_settings, Settings
+from finresearch_agent.ipo import build_hk_ipo_report, IpoReport
+from finresearch_agent.utils import get_iso_week_string
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -29,7 +29,7 @@ I18N: dict[str, dict[str, str]] = {
         "page_title": "金融研究看板",
         "sidebar_title": "導航",
         "nav_dashboard": "研究看板",
-        "nav_ipo": "IPO 報告",
+        "nav_ipo": "IPO 报告",
         "language": "語言",
         "language_zh": "繁體中文",
         "language_en": "English",
@@ -77,29 +77,29 @@ I18N: dict[str, dict[str, str]] = {
         "no_financials": "該快照不包含財務數據。",
         "snapshot_json": "快照 JSON",
         "explanation": "解釋",
-        "no_explanation": "該 JSON 不包含解釋文本。",
+        "no_explanation": "该 JSON 不包含解释文本。",
         "risk_low": "低",
         "risk_medium": "中",
         "risk_high": "高",
-        "ipo_header": "港股 IPO 研究報告",
-        "ipo_input_section": "IPO 數據輸入",
-        "ipo_generate_btn": "生成報告",
-        "ipo_use_llm": "使用 LLM 提取缺失字段與風險",
-        "ipo_as_of": "報告日期",
-        "ipo_week": "週份",
-        "ipo_industry": "行業",
-        "ipo_status": "狀態",
-        "ipo_expected_listing": "預計上市日期",
-        "ipo_business_summary": "業務摘要",
-        "ipo_key_risks": "關鍵風險",
-        "ipo_disclaimer": "免責聲明",
-        "ipo_no_data": "請上傳或選擇 IPO 原始數據 JSON 以生成報告。",
-        "ipo_parse_failed": "解析 IPO 數據失敗：{err}",
-        "ipo_chat_placeholder": "在此輸入 IPO 相關信息或詢問...",
-        "ipo_source_label": "原始資料來源 (粘貼招股書摘錄或新聞)",
-        "ipo_parsing": "正在分析您的輸入內容...",
-        "ipo_no_info": "未發現足夠的 IPO 信息。請輸入更多詳情，例如：'XX公司擬於XX日期上市，業務是...'。",
-        "ipo_found_n": "成功解析出 {n} 條 IPO 記錄。",
+        "ipo_header": "港股 IPO 研究报告",
+        "ipo_input_section": "IPO 数据输入",
+        "ipo_generate_btn": "生成报告",
+        "ipo_use_llm": "使用 LLM 提取缺失字段与风险",
+        "ipo_as_of": "报告日期",
+        "ipo_week": "周份",
+        "ipo_industry": "行业",
+        "ipo_status": "状态",
+        "ipo_expected_listing": "预计上市日期",
+        "ipo_business_summary": "业务摘要",
+        "ipo_key_risks": "关键风险",
+        "ipo_disclaimer": "免责声明",
+        "ipo_no_data": "请上传或选择 IPO 原始数据 JSON 以生成报告。",
+        "ipo_parse_failed": "解析 IPO 数据失败：{err}",
+        "ipo_chat_placeholder": "在此输入 IPO 相关信息或询问...",
+        "ipo_source_label": "原始资料来源 (粘贴招股书摘录或新闻)",
+        "ipo_parsing": "正在分析您的输入内容...",
+        "ipo_no_info": "未发现足够的 IPO 信息。请输入更多详情，例如：'XX公司拟于XX日期上市，业务是...'。",
+        "ipo_found_n": "成功解析出 {n} 条 IPO 记录。",
     },
     "en": {
         "page_title": "Financial Research Dashboard",
@@ -427,11 +427,11 @@ def main() -> None:
         if payload is None:
             st.markdown(
                 f"""
-    <div class="hero">
-      <div class="hero-title">{t("hero_title", lang=lang_code)}</div>
-      <div class="hero-sub">{t("hero_sub", lang=lang_code)}</div>
-    </div>
-    """,
+<div class="hero">
+  <div class="hero-title">{t("hero_title", lang=lang_code)}</div>
+  <div class="hero-sub">{t("hero_sub", lang=lang_code)}</div>
+</div>
+""",
                 unsafe_allow_html=True,
             )
             st.info(t("hero_hint", lang=lang_code))
@@ -456,12 +456,12 @@ def main() -> None:
 
         st.markdown(
             f"""
-    <div class="hero">
-      <div class="hero-title">{snapshot.company_name} <span class="mono">({snapshot.symbol})</span></div>
-      <div class="hero-sub">{t("market", lang=lang_code)}: {snapshot.market} • {t("as_of", lang=lang_code)}: {snapshot.as_of.isoformat()} • {t("analysis_id", lang=lang_code)}: <span class="mono">{snapshot.analysis_id}</span></div>
-      <div style="margin-top:10px;">{t("risk_level", lang=lang_code)}: {badge_html_localized}</div>
-    </div>
-    """,
+<div class="hero">
+  <div class="hero-title">{snapshot.company_name} <span class="mono">({snapshot.symbol})</span></div>
+  <div class="hero-sub">{t("market", lang=lang_code)}: {snapshot.market} • {t("as_of", lang=lang_code)}: {snapshot.as_of.isoformat()} • {t("analysis_id", lang=lang_code)}: <span class="mono">{snapshot.analysis_id}</span></div>
+  <div style="margin-top:10px;">{t("risk_level", lang=lang_code)}: {badge_html_localized}</div>
+</div>
+""",
             unsafe_allow_html=True,
         )
 
@@ -604,7 +604,7 @@ def main() -> None:
                             st.write(msg_content)
                             st.session_state["ipo_messages"].append({"role": "assistant", "content": msg_content})
                         else:
-                            week = iso_week_string(as_of)
+                            week = get_iso_week_string(as_of)
                             report = build_hk_ipo_report(
                                 records,
                                 as_of_date=as_of,

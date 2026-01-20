@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from finresearch_agent.identify.resolver import CompanyResolver
+from finresearch_agent.identify import CompanyResolver
 
 
 def test_company_resolver_ticker_name_alias(tmp_path: Path):
