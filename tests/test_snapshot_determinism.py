@@ -11,7 +11,7 @@ from finresearch_agent.models import (
     RuleResults,
     TechnicalIndicators,
 )
-from finresearch_agent.snapshot import build_snapshot
+from finresearch_agent.state import build_snapshot
 
 
 def test_analysis_id_is_stable_for_same_inputs(tmp_path):

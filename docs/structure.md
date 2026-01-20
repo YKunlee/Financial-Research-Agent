@@ -28,7 +28,7 @@ Financial-Research-Agent/
 | :--- | :--- |
 | `datasources.py` | **多源数据整合**：对接专业金融 API 和财报数据，确保数据源头的权威性与实时性，而非依赖通用搜索。 |
 | `ipo.py` | **深度专业逻辑**：内置金融行业分析模型，专门处理 HK IPO 等复杂且高度专业化的业务场景。 |
-| `snapshot.py` | **可复现性（快照）**：保存分析时的瞬时数据证据，确保研究结论在任何时候都可追溯、可复现。 |
+| `state.py` | **可复现性与状态管理**：保存分析快照确保可追溯；同时作为状态机记录 Agent 每个决策节点的完整上下文，支持回滚和证据链追溯。 |
 | `cache.py` | **性能与成本优化**：通过 Redis 缓存机制减少昂贵的外部 API 和 LLM 调用，提升系统响应速度。 |
 | `rules.py` | **合规与风控护栏**：通过结构化规则强制 AI 遵守金融逻辑，防止产生误导性的投资建议。 |
 | `metrics.py` | **质量监控与量化**：自动计算技术与风险指标，为 AI 的解释提供精确的量化事实依据。 |
@@ -66,9 +66,9 @@ Financial-Research-Agent/
 - `src/finresearch_agent/rules.py`  
   风险规则定义与执行，输出结构化风险标记。
 
-### 7) 快照（T8）
-- `src/finresearch_agent/snapshot.py`  
-  汇总输出，生成不可变 `analysis_id`，写入 `snapshots/`。
+### 7) 状态管理与快照（T8）
+- `src/finresearch_agent/state.py`  
+  **双重职责**：①汇总输出，生成不可变 `analysis_id`，写入 `snapshots/`；②状态机管理器（StateManager），记录 Agent 每个步骤的完整状态（类似 LangGraph），支持状态回滚、证据链追溯和检查点持久化（JSON/Redis），实现金融级可审计性。
 
 ### 8) LLM 解释（T9）
 - `src/finresearch_agent/llm.py`  
