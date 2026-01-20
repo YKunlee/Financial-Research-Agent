@@ -201,7 +201,8 @@ class TestStateManager:
             checkpoint_id = manager.save_checkpoint(node_name="test_node")
 
             # 验证文件已创建
-            checkpoint_file = storage_path / f"{checkpoint_id}.json"
+            safe_checkpoint_id = checkpoint_id.replace(":", "__")
+            checkpoint_file = storage_path / f"{safe_checkpoint_id}.json"
             assert checkpoint_file.exists()
 
             # 加载检查点

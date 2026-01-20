@@ -302,7 +302,8 @@ class StateManager:
         """持久化检查点"""
         if isinstance(self._storage_backend, Path):
             # JSON 文件存储
-            filepath = self._storage_backend / f"{checkpoint_id}.json"
+            safe_checkpoint_id = checkpoint_id.replace(":", "__")
+            filepath = self._storage_backend / f"{safe_checkpoint_id}.json"
             filepath.write_text(
                 json_dumps(state.model_dump(mode="json")),
                 encoding="utf-8"
@@ -316,7 +317,13 @@ class StateManager:
         """从持久化存储加载检查点"""
         with self._lock:
             if isinstance(self._storage_backend, Path):
-                filepath = self._storage_backend / f"{checkpoint_id}.json"
+                safe_checkpoint_id = checkpoint_id.replace(":", "__")
+                filepath = self._storage_backend / f"{safe_checkpoint_id}.json"
+                if not filepath.exists() and safe_checkpoint_id != checkpoint_id:
+                    # Backward compatible for POSIX checkpoints written with ":" in filename.
+                    legacy = self._storage_backend / f"{checkpoint_id}.json"
+                    if legacy.exists():
+                        filepath = legacy
                 if not filepath.exists():
                     raise FileNotFoundError(f"Checkpoint {checkpoint_id} not found")
                 data = json_loads(filepath.read_text(encoding="utf-8"))

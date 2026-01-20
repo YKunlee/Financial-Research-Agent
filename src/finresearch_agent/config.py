@@ -16,6 +16,8 @@ class Settings:
     market_data_provider: str = os.getenv("MARKET_DATA_PROVIDER", "stooq")
     alphavantage_api_key: str | None = os.getenv("ALPHAVANTAGE_API_KEY") or None
     newsapi_key: str | None = os.getenv("NEWSAPI_KEY") or None
+    google_api_key: str | None = os.getenv("GOOGLE_API_KEY") or None
+    google_cse_id: str | None = os.getenv("GOOGLE_CSE_ID") or None
 
 
 def get_settings() -> Settings:

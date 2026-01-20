@@ -201,7 +201,13 @@ def _extract_structured(excerpts: dict[Literal["prospectus", "announcement"], st
     from langchain_core.messages import SystemMessage
     from langchain_core.prompts import ChatPromptTemplate
 
-    model = ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model, temperature=0)
+    model = ChatOpenAI(
+        api_key=settings.openai_api_key, 
+        model=settings.openai_model, 
+        temperature=0,
+        timeout=60,
+        max_retries=2
+    )
     sys = SystemMessage(content=(
         "You extract fields for an HK IPO research report.\n"
         "Rules:\n- Use ONLY the provided text excerpts.\n- Do NOT add facts.\n"
@@ -212,7 +218,10 @@ def _extract_structured(excerpts: dict[Literal["prospectus", "announcement"], st
         sys, ("human", "Prospectus excerpt (may be empty):\n{prospectus}\n\nAnnouncement excerpt (may be empty):\n{announcement}\n\nReturn JSON:\n{{\n  \"industry\": string,\n  \"business_summary\": string,\n  \"use_of_proceeds\": string,\n  \"risks\": [ {{\"risk_type\": string, \"source\": \"prospectus\"|\"announcement\"}} ]\n}}\n")
     ])
     chain = prompt | model
-    out = chain.invoke({"prospectus": excerpts.get("prospectus", ""), "announcement": excerpts.get("announcement", "")})
+    out = chain.invoke(
+        {"prospectus": excerpts.get("prospectus", ""), "announcement": excerpts.get("announcement", "")},
+        config={"timeout": 60}
+    )
     text = getattr(out, "content", str(out)).strip()
     try:
         payload = json.loads(text)

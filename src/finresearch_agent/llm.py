@@ -23,7 +23,13 @@ def _explain_with_openai(snapshot: AnalysisSnapshot, settings: Settings) -> str:
     from langchain_openai import ChatOpenAI
 
     snapshot_json = json_dumps(snapshot.model_dump(mode="json"))
-    model = ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model, temperature=0)
+    model = ChatOpenAI(
+        api_key=settings.openai_api_key, 
+        model=settings.openai_model, 
+        temperature=0,
+        timeout=60,
+        max_retries=2
+    )
 
     sys = SystemMessage(
         content=(
@@ -44,7 +50,7 @@ def _explain_with_openai(snapshot: AnalysisSnapshot, settings: Settings) -> str:
         ]
     )
     chain = prompt | model
-    out = chain.invoke({"snapshot_json": snapshot_json})
+    out = chain.invoke({"snapshot_json": snapshot_json}, config={"timeout": 60})
     text = getattr(out, "content", str(out)).strip()
     _validate_no_new_numbers(snapshot_json, text)
     _validate_required_citations(snapshot, text)

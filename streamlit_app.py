@@ -8,6 +8,10 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 from datetime import date
+from dotenv import load_dotenv
+
+# Load .env file before importing config
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
@@ -18,6 +22,9 @@ from finresearch_agent.models import AnalysisSnapshot
 from finresearch_agent.config import get_settings, Settings
 from finresearch_agent.ipo import build_hk_ipo_report, IpoReport
 from finresearch_agent.utils import get_iso_week_string
+from finresearch_agent.datasources import NewsAPIProvider, NewsService
+from finresearch_agent.cache import InMemoryJSONCache
+from finresearch_agent.chat import append_message_dedup, dedupe_consecutive_messages
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -339,7 +346,13 @@ def extract_ipos_from_text(text: str, settings: Settings) -> list[dict[str, Any]
     if not settings.openai_api_key or not text.strip():
         return []
 
-    model = ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model, temperature=0)
+    model = ChatOpenAI(
+        api_key=settings.openai_api_key, 
+        model=settings.openai_model, 
+        temperature=0,
+        timeout=60,
+        max_retries=2
+    )
     sys_msg = SystemMessage(
         content=(
             "You are a financial data extractor. Extract HK IPO records from the provided text.\n"
@@ -360,7 +373,7 @@ def extract_ipos_from_text(text: str, settings: Settings) -> list[dict[str, Any]
     user_msg = HumanMessage(content=text)
 
     try:
-        resp = model.invoke([sys_msg, user_msg])
+        resp = model.invoke([sys_msg, user_msg], config={"timeout": 60})
         content = str(resp.content).strip()
         if content.startswith("```json"):
             content = content[7:-3].strip()
@@ -369,8 +382,190 @@ def extract_ipos_from_text(text: str, settings: Settings) -> list[dict[str, Any]
         
         data = json.loads(content)
         return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        st.error(f"LLM 調用失敗: {str(e)}")
         return []
+
+
+def fetch_news_text_for_ipo(query: str, settings: Settings) -> str | None:
+    """Search recent news for IPO information using NewsAPI.
+    
+    Searches the last 2 months with IPO-related keywords to maximize hit rate.
+    """
+    import requests
+    from datetime import datetime, timedelta, timezone
+
+    print(f"\n[NewsAPI] Starting search for: {query}")
+    query = query.strip()
+    if not query or not settings.newsapi_key:
+        print("[NewsAPI] Skipped: No query or API key")
+        return None
+
+    # Build search query with IPO keywords for better relevance
+    search_query = f"{query} IPO"
+    
+    # Search last 2 months instead of just today
+    now = datetime.now(tz=timezone.utc)
+    from_dt = now - timedelta(days=60)
+    
+    url = "https://newsapi.org/v2/everything"
+    params = {
+        "q": search_query,
+        "from": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "to": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sortBy": "relevancy",
+        "pageSize": 10,
+        "apiKey": settings.newsapi_key,
+    }
+
+    try:
+        print(f"[NewsAPI] Requesting URL: {url} with params: {params}")
+        resp = requests.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:  # noqa: BLE001 - present user-facing error
+        print(f"[NewsAPI] Error: {exc}")
+        st.info(f"News search failed: {exc}")
+        return None
+
+    articles = payload.get("articles") or []
+    print(f"[NewsAPI] Found {len(articles)} articles with 'IPO' keyword")
+    if not articles:
+        # Fallback: try without "IPO" keyword
+        print("[NewsAPI] Falling back to query without 'IPO' keyword")
+        params["q"] = query
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+            articles = payload.get("articles") or []
+            print(f"[NewsAPI] Found {len(articles)} articles in fallback search")
+        except Exception as exc:
+            print(f"[NewsAPI] Fallback error: {exc}")
+            pass
+
+    if not articles:
+        return None
+
+    parts: list[str] = []
+    for art in articles[:5]:
+        title = (art.get("title") or "").strip()
+        desc = (art.get("description") or "").strip()
+        content = (art.get("content") or "").strip()
+        url_str = (art.get("url") or "").strip()
+
+        segments = []
+        if title:
+            segments.append(f"Title: {title}")
+        if desc:
+            segments.append(f"Description: {desc}")
+        if content:
+            segments.append(f"Content: {content}")
+        if url_str:
+            segments.append(f"URL: {url_str}")
+
+        if segments:
+            parts.append("\n".join(segments))
+
+    result = "\n\n---\n\n".join(parts) if parts else None
+    print(f"[NewsAPI] Returning {len(parts)} processed article segments (Total length: {len(result) if result else 0})")
+    return result
+
+
+def fetch_google_search_for_ipo(query: str, settings: Settings) -> str | None:
+    """Search for IPO information using Google Custom Search API.
+    
+    Google search provides better coverage for Chinese company names and HK IPO news.
+    """
+    import requests
+
+    print(f"\n[GoogleSearch] Starting search for: {query}")
+    query = query.strip()
+    if not query or not settings.google_api_key or not settings.google_cse_id:
+        print("[GoogleSearch] Skipped: No query or API key/CSE ID")
+        return None
+
+    # Build search query with IPO keywords
+    search_query = f"{query} IPO 招股 上市"
+    
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": settings.google_api_key,
+        "cx": settings.google_cse_id,
+        "q": search_query,
+        "num": 10,  # max 10 results per request
+    }
+
+    try:
+        print(f"[GoogleSearch] Requesting URL: {url} with params: {params}")
+        resp = requests.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:  # noqa: BLE001 - present user-facing error
+        print(f"[GoogleSearch] Error: {exc}")
+        st.info(f"Google search failed: {exc}")
+        return None
+
+    items = payload.get("items") or []
+    print(f"[GoogleSearch] Found {len(items)} results")
+    if not items:
+        # Fallback: try simpler query
+        print("[GoogleSearch] Falling back to simpler query")
+        params["q"] = f"{query} IPO"
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+            items = payload.get("items") or []
+            print(f"[GoogleSearch] Found {len(items)} results in fallback search")
+        except Exception as exc:
+            print(f"[GoogleSearch] Fallback error: {exc}")
+            pass
+
+    if not items:
+        return None
+
+    parts: list[str] = []
+    for item in items[:5]:
+        title = (item.get("title") or "").strip()
+        snippet = (item.get("snippet") or "").strip()
+        link = (item.get("link") or "").strip()
+
+        segments = []
+        if title:
+            segments.append(f"Title: {title}")
+        if snippet:
+            segments.append(f"Snippet: {snippet}")
+        if link:
+            segments.append(f"URL: {link}")
+
+        if segments:
+            parts.append("\n".join(segments))
+
+    result = "\n\n---\n\n".join(parts) if parts else None
+    print(f"[GoogleSearch] Returning {len(parts)} processed result segments (Total length: {len(result) if result else 0})")
+    return result
+
+
+def fetch_web_search_for_ipo(query: str, settings: Settings) -> tuple[str | None, str]:
+    """Search for IPO information using available search APIs.
+    
+    Tries Google first (better for Chinese), then falls back to NewsAPI.
+    Returns (search_result_text, source_name).
+    """
+    # Try Google first (better for Chinese company names)
+    if settings.google_api_key and settings.google_cse_id:
+        result = fetch_google_search_for_ipo(query, settings)
+        if result:
+            return result, "Google"
+    
+    # Fallback to NewsAPI
+    if settings.newsapi_key:
+        result = fetch_news_text_for_ipo(query, settings)
+        if result:
+            return result, "NewsAPI"
+    
+    return None, ""
 
 
 def main() -> None:
@@ -564,6 +759,8 @@ def main() -> None:
         
         if "ipo_messages" not in st.session_state:
             st.session_state["ipo_messages"] = []
+        else:
+            st.session_state["ipo_messages"] = dedupe_consecutive_messages(st.session_state["ipo_messages"])
 
         for msg in st.session_state["ipo_messages"]:
             with st.chat_message(msg["role"]):
@@ -571,55 +768,95 @@ def main() -> None:
                 if "report" in msg:
                     render_ipo_report(msg["report"], lang_code)
 
-        with st.sidebar:
-            st.divider()
-            st.subheader(t("ipo_input_section", lang=lang_code))
-            as_of = st.date_input(t("ipo_as_of", lang=lang_code), value=date.today())
-            raw_source = st.text_area(t("ipo_source_label", lang=lang_code), height=200, help="Paste prospectus or news here")
-            use_llm = st.checkbox(t("ipo_use_llm", lang=lang_code), value=True)
-            generate_btn = st.button(t("ipo_generate_btn", lang=lang_code), type="primary")
-
         query = st.chat_input(t("ipo_chat_placeholder", lang=lang_code))
         
-        if query or generate_btn:
-            input_text = query if query else raw_source
-            if not input_text.strip():
+        if query:
+            # Normalize input: treat None as empty string
+            q_str = query.strip()
+            
+            if not q_str:
                 st.warning(t("ipo_no_info", lang=lang_code))
             else:
-                if query:
-                    st.session_state["ipo_messages"].append({"role": "user", "content": query})
-                    with st.chat_message("user"):
-                        st.write(query)
+                st.session_state["ipo_messages"].append({"role": "user", "content": q_str})
+                with st.chat_message("user"):
+                    st.write(q_str)
 
                 with st.chat_message("assistant"):
-                    with st.spinner(t("ipo_parsing", lang=lang_code)):
-                        settings = get_settings()
-                        # If the user just typed a short query and we have raw_source, combine them
-                        combined_text = f"Query: {query}\n\nContext:\n{raw_source}" if query and raw_source.strip() else input_text
-                        
+                    settings = get_settings()
+                    as_of = date.today()
+                    print(f"\n[Main] Processing IPO query: '{q_str}' (Source: Chat)")
+                    
+                    # Step 1: Web search (separate spinner)
+                    news_text, search_source = None, ""
+                    # Only perform web search if we have a short query (likely a company name)
+                    # If input is very long, it's probably already a prospectus, skip search
+                    if len(q_str) < 500:
+                        with st.spinner("🔍 正在搜索相關資訊..." if lang_code == "zh" else "🔍 Searching..."):
+                            news_text, search_source = fetch_web_search_for_ipo(q_str, settings)
+                    else:
+                        print(f"[Main] Query too long ({len(q_str)} chars), treating as prospectus, skipping web search")
+                    
+                    # Step 2: Display search results
+                    if news_text:
+                        print(f"[Main] Search SUCCESS via {search_source}. Results length: {len(news_text)}")
+                        st.caption(f"✅ 從 {search_source} 找到相關資訊" if lang_code == "zh" else f"✅ Found info via {search_source}")
+                        with st.expander("🔍 搜索結果" if lang_code == "zh" else "🔍 Search Results", expanded=True):
+                            st.text(news_text[:3000] + "..." if len(news_text) > 3000 else news_text)
+                    else:
+                        print(f"[Main] Search EMPTY or FAILED")
+                        has_search_api = settings.google_api_key or settings.newsapi_key
+                        if has_search_api and len(q_str) < 500:
+                            st.caption(f"⚠️ 未找到 '{q_str}' 的相關資訊" if lang_code == "zh" else f"⚠️ No web results for '{q_str}'")
+                            with st.expander("🔍 搜索結果" if lang_code == "zh" else "🔍 Search Results", expanded=True):
+                                st.write("搜索結果為空，請嘗試：" if lang_code == "zh" else "No results found. Try:")
+                                st.write("1. 使用英文公司名或股票代碼" if lang_code == "zh" else "1. Use English company name or stock code")
+                                st.write("2. 直接貼上招股書或新聞全文" if lang_code == "zh" else "2. Paste full prospectus or news article")
+                        elif not has_search_api:
+                            st.caption("⚠️ 未配置搜索 API，請在 .env 中設置 GOOGLE_API_KEY 和 GOOGLE_CSE_ID" if lang_code == "zh" else "⚠️ No search API configured. Set GOOGLE_API_KEY and GOOGLE_CSE_ID in .env")
+                    
+                    # Step 3: Build combined text for LLM
+                    if news_text:
+                        combined_text = f"Query: {q_str}\n\nWeb search results:\n{news_text}"
+                    else:
+                        combined_text = q_str
+                    
+                    print(f"[Main] Sending to LLM. Total prompt text length: {len(combined_text)}")
+                    
+                    # Step 4: LLM parsing (separate spinner)
+                    with st.spinner("🧠 正在分析 IPO 資訊..." if lang_code == "zh" else "🧠 Analyzing IPO info..."):
                         records = extract_ipos_from_text(combined_text, settings)
-                        
-                        if not records:
-                            msg_content = t("ipo_no_info", lang=lang_code)
-                            st.write(msg_content)
-                            st.session_state["ipo_messages"].append({"role": "assistant", "content": msg_content})
-                        else:
-                            week = get_iso_week_string(as_of)
-                            report = build_hk_ipo_report(
-                                records,
-                                as_of_date=as_of,
-                                week=week,
-                                settings=settings,
-                                use_llm_extraction=use_llm
-                            )
-                            msg_content = t("ipo_found_n", lang=lang_code, n=len(report.ipos))
-                            st.write(msg_content)
-                            render_ipo_report(report, lang_code)
-                            st.session_state["ipo_messages"].append({
-                                "role": "assistant", 
-                                "content": msg_content,
-                                "report": report
-                            })
+                    
+                    print(f"[Main] LLM found {len(records)} IPO records")
+                    
+                    # Step 5: Display results
+                    if not records:
+                        msg_content = t("ipo_no_info", lang=lang_code)
+                        st.write(msg_content)
+                        if news_text:
+                            st.info("💡 已搜索到相關內容，但未能提取出 IPO 記錄。請直接貼上完整的招股書或新聞全文。" if lang_code == "zh" else "💡 Found related content but couldn't extract IPO records. Try pasting the full prospectus or news article.")
+                        st.session_state["ipo_messages"] = append_message_dedup(
+                            st.session_state["ipo_messages"],
+                            role="assistant",
+                            content=msg_content,
+                        )
+                    else:
+                        week = get_iso_week_string(as_of)
+                        report = build_hk_ipo_report(
+                            records,
+                            as_of_date=as_of,
+                            week=week,
+                            settings=settings,
+                            use_llm_extraction=True
+                        )
+                        msg_content = t("ipo_found_n", lang=lang_code, n=len(report.ipos))
+                        st.write(msg_content)
+                        render_ipo_report(report, lang_code)
+                        st.session_state["ipo_messages"] = append_message_dedup(
+                            st.session_state["ipo_messages"],
+                            role="assistant",
+                            content=msg_content,
+                            report=report,
+                        )
 
 
 if __name__ == "__main__":

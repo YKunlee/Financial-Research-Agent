@@ -103,7 +103,7 @@ class StooqMarketDataProvider(MarketDataProvider):
 
 @dataclass(frozen=True)
 class MarketDataService(BaseCachingService[MarketData]):
-    provider: MarketDataProvider
+    provider: MarketDataProvider | None = None
 
     def _key(self, symbol: str, day: date) -> str:
         return f"market_data:{symbol}:{day.isoformat()}"
@@ -215,7 +215,7 @@ class AlphaVantageFinancialsProvider(FinancialsProvider):
 
 @dataclass(frozen=True)
 class FinancialsService(BaseCachingService[FinancialQuarter]):
-    provider: FinancialsProvider
+    provider: FinancialsProvider | None = None
 
     def _key(self, symbol: str, quarter: str) -> str:
         return f"financials:{symbol}:{quarter.upper()}"
@@ -262,7 +262,7 @@ class NewsAPIProvider(NewsProvider):
 
 @dataclass(frozen=True)
 class NewsService(BaseCachingService[dict]):
-    provider: NewsProvider
+    provider: NewsProvider | None = None
 
     def _key(self, symbol: str, day: date) -> str:
         return f"news:{symbol}:{day.isoformat()}"
