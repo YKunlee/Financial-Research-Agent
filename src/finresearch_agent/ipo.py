@@ -1,3 +1,4 @@
+# 负责港股 IPO 相关数据的清洗规范化、风险与业务描述抽取（可选使用 LLM），并通过命令行生成周度结构化 IPO 报告 JSON。
 from __future__ import annotations
 
 import re

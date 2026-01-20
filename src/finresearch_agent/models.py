@@ -1,3 +1,4 @@
+# 使用 Pydantic 定义公司、行情、财报、技术指标、风险指标、规则标记和完整分析快照等核心数据模型，约束字段类型与结构。
 from __future__ import annotations
 
 from datetime import date, datetime

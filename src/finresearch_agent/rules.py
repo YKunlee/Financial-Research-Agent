@@ -1,3 +1,4 @@
+# 定义第一版风险规则集 RISK_RULES_V1，并基于技术指标与风险指标生成带证据信息的 RiskFlag 列表和 RuleResults 结果对象。
 from __future__ import annotations
 
 import operator

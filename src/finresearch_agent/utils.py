@@ -1,3 +1,4 @@
+# 提供 JSON 序列化规范化、时间与周/季度计算、收益率和收盘价处理、数值转换及字符串清洗等通用工具函数。
 from __future__ import annotations
 
 import json

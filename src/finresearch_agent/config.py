@@ -1,3 +1,4 @@
+# 从环境变量读取 Redis、OpenAI、行情提供商等配置并封装为只读 Settings 对象，统一管理外部依赖的连接参数。
 from __future__ import annotations
 
 import os

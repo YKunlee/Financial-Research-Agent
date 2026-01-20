@@ -1,3 +1,4 @@
+# 实现端到端的股票研究代理 StockResearchAgent，负责公司识别、数据抓取、指标计算、风险规则评估与分析快照持久化。
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,4 @@
+# 封装对分析快照的 explain-only 文本生成逻辑：优先调用 OpenAI 大模型，否则退回完全确定性的规则型说明。
 from __future__ import annotations
 
 import re

@@ -1,3 +1,4 @@
+# 实现 finresearch 命令行工具入口，解析查询标的与日期等参数并调用 StockResearchAgent 执行分析并输出结果。
 from __future__ import annotations
 
 import argparse

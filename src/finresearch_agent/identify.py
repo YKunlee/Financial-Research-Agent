@@ -1,3 +1,4 @@
+# 读取本地 companies.csv 和 aliases.json 文件，通过代码、公司名或别名解析查询字符串并返回标准化的 CompanyIdentity 标的信息。
 from __future__ import annotations
 
 import csv

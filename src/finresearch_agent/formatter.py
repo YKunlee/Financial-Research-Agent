@@ -1,3 +1,4 @@
+# 根据 AnalysisSnapshot 与解释文本生成 CLI 文本视图和结构化 JSON 结果，供终端展示或下游系统消费。
 from __future__ import annotations
 
 from finresearch_agent.models import AnalysisSnapshot

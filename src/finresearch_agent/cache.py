@@ -1,3 +1,4 @@
+# 抽象 JSONCache 接口并提供内存和 Redis 两种实现，用于对行情、财报、新闻等 JSON 数据做键值缓存以减轻外部请求压力。
 from __future__ import annotations
 
 import time

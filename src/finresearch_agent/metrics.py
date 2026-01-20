@@ -1,3 +1,4 @@
+# 基于行情收盘价序列计算移动均线、波动率、最大回撤、Sharpe 和 VaR 等技术与风险指标，并记录对应算法版本号。
 from __future__ import annotations
 
 from datetime import date

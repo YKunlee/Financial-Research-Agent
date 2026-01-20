@@ -1,3 +1,4 @@
+# 将公司身份、行情、财报与指标等组装成 AnalysisSnapshot，计算稳定的 analysis_id 哈希并在需要时持久化为 JSON 快照文件。
 from __future__ import annotations
 
 import hashlib

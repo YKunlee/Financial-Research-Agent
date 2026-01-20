@@ -1,3 +1,4 @@
+# 定义行情、财报和新闻等外部数据提供者抽象及带缓存的服务类，从第三方 API 抓取原始数据并转为统一的内部模型。
 from __future__ import annotations
 
 import pandas as pd
